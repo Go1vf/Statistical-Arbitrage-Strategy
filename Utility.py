@@ -23,7 +23,7 @@ class Utility:
         all_tokens = df.iloc[:, 1:].values.flatten()
         token_counts = pd.Series(all_tokens).value_counts()
         threshold = M * 0.8
-        frequent_tokens = token_counts[token_counts > threshold].index.tolist()
+        frequent_tokens = token_counts[token_counts >= threshold].index.tolist()
         return frequent_tokens
 
     @staticmethod
@@ -36,7 +36,10 @@ class Utility:
     @staticmethod
     def get_hourly_returns(df):
         hourly_returns = df.pct_change()
-        hourly_returns.dropna(inplace=True)
+        # Drop the first row as it will be NaN after pct_change()
+        hourly_returns = hourly_returns.iloc[1:]
+        hourly_returns.replace([np.inf, -np.inf], np.nan, inplace=True)
+        hourly_returns = hourly_returns.fillna(0)
         return hourly_returns
 
     @staticmethod
@@ -80,7 +83,9 @@ class Utility:
     
     @staticmethod
     def calculate_factor_returns(hourly_returns, eigenportfolios):
-        return hourly_returns.dot(eigenportfolios)
+        df = np.dot(hourly_returns, eigenportfolios[['eigenportfolio1', 'eigenportfolio2']])
+        df = pd.DataFrame(df, columns=['RiskFactor1', 'RiskFactor2'])
+        return df
 
     @staticmethod
     def estimate_residual_return(hourly_returns, factors_return):
@@ -93,7 +98,7 @@ class Utility:
         # Loop through each token (column) in the hourly returns DataFrame
         for token in hourly_returns.columns:
             # Prepare the independent variables (X) and dependent variable (y)
-            X = factors_return[['PC1', 'PC2']]  # the two principal components as independent variables
+            X = factors_return[['RiskFactor1', 'RiskFactor2']]  # the two principal components as independent variables
             y = hourly_returns[token]  # the hourly returns for the token as the dependent variable
             
             # Fit the linear regression model
