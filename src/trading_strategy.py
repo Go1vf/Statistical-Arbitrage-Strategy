@@ -29,8 +29,6 @@ class TradingStrategy:
         self._residual_return = None
         self._ou_parameters = None
         self._s_score = None
-        self._ou_parameters = None
-        self.calculate_s_score()
 
     @property
     def tokens_price_window(self):
@@ -102,66 +100,66 @@ class TradingStrategy:
 
     @property
     def ou_parameters(self):
-        model = LinearRegression()
-        temp = self._residual_return.columns
-        ou_parameters = pd.DataFrame(index=temp, columns=['kappa', 'm', 'sigma', 'sigma_eq'])
+        if self._ou_parameters is None:
+            temp = self.residual_return.columns
+            self._ou_parameters = pd.DataFrame(index=temp, columns=['kappa', 'm', 'sigma', 'sigma_eq'])
+            model = LinearRegression()
 
-        for token in temp:
-            X_k = temp[token].cumsum()
+            for token in temp:
+                X_k = self.residual_return[token].cumsum()
+                # Define X_n and X_n_plus_1 for the token
+                X_n = X_k[:-1]
+                X_n_plus_1 = X_k[1:]
 
-            # Define X_n and X_n_plus_1 for the token
-            X_n = X_k[:-1]
-            X_n_plus_1 = X_k[1:]
+                # Reshape X_n for sklearn compatibility
+                X_n = X_n.values.reshape(-1, 1)
+                X_n_plus_1 = X_n_plus_1.values
 
-            # Reshape X_n for sklearn compatibility
-            X_n = X_n.values.reshape(-1, 1)
-            X_n_plus_1 = X_n_plus_1.values
+                # Fit the linear regression model for the token
+                model.fit(X_n, X_n_plus_1)
 
-            # Fit the linear regression model for the token
-            model.fit(X_n, X_n_plus_1)
+                # Get the regression parameters 'a' and 'b'
+                a = model.intercept_  # Intercept is a scalar
+                b = model.coef_[0]  # b parameter is a 1D array, get the first element
 
-            # Get the regression parameters 'a' and 'b'
-            a = model.intercept_  # Intercept is a scalar
-            b = model.coef_[0]  # b parameter is a 1D array, get the first element
+                # Calculate variance of residuals
+                residuals = X_n_plus_1 - model.predict(X_n)
+                residuals_variance = np.var(residuals, ddof=1)
 
-            # Calculate variance of residuals
-            residuals = X_n_plus_1 - model.predict(X_n)
-            residuals_variance = np.var(residuals, ddof=1)
+                # Calculate OU process parameters for the token
+                kappa = -np.log(b) * 8760  # Assuming 8760 hours in a year
+                m = a / (1 - b)
+                sigma = np.sqrt(residuals_variance * 2 * kappa / (1 - b ** 2))
+                sigma_eq = np.sqrt(residuals_variance / (1 - b ** 2))
 
-            # Calculate OU process parameters for the token
-            kappa = -np.log(b) * 8760  # Assuming 8760 hours in a year
-            m = a / (1 - b)
-            sigma = np.sqrt(residuals_variance * 2 * kappa / (1 - b ** 2))
-            sigma_eq = np.sqrt(residuals_variance / (1 - b ** 2))
-
-            # Store results in the DataFrame
-            self._ou_parameters.loc[token] = [kappa, m, sigma, sigma_eq]
+                # Store results in the DataFrame
+                self._ou_parameters.loc[token, :] = [kappa, m, sigma, sigma_eq]
 
         return self._ou_parameters
 
-    def calculate_s_score(self):
+    @property
+    def s_score(self):
         """
         Calculate the s-score for a token.
         """
-        self._s_score = - self._ou_parameters['m'] / self._ou_parameters['sigma_eq']
+        if self._s_score is None:
+            self._s_score = - self.ou_parameters['m'] / self.ou_parameters['sigma_eq']
+        return self._s_score
 
     def generate_signals(self):
         """
         Generate buy/sell signals based on s-scores and return as a DataFrame.
         """
         signals_data = []
-        for token, s_score in self._s_score.items():
+        for token, s_score in self.s_score.items():
             # Implement the logic based on the paper's rules
-            if s_score < -self.sbo:
-                signal = 'buy_open'
-            elif s_score > self.sso:
-                signal = 'sell_open'
-            elif self.sbc > s_score > -self.ssc:  # Close short if s_score is less than s_bc
-                signal = 'close_all'
-            elif s_score > -self.ssc:  # Close long if s_score is greater than -s_sc
-                signal = 'close_long'
-            elif s_score < self.sbc:
-                signal = 'close_short'
+            # Open short means we buy one dollar of the corresponding stock and sell beta dollars of BTC
+            if s_score > self.sso:
+                signal = 'open_short'
+            elif s_score < -self.sbo:
+                signal = 'open_long'
+            elif self.sbc > s_score > -self.ssc:
+                signal = 'close_short/long'
             else:
                 signal = 'hold'
 
@@ -176,3 +174,5 @@ class TradingStrategy:
         # Convert the list of dictionaries to a DataFrame
         signals_df = pd.DataFrame(signals_data)
         return signals_df
+
+#%%

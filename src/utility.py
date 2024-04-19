@@ -13,6 +13,13 @@ class Utility:
         raise NotImplementedError("This class is not meant to be instantiated")
 
     @staticmethod
+    def parse_date(date_str):
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S%z')
+        except ValueError as e:
+            raise ValueError(f"Invalid date format: {date_str}") from e
+
+    @staticmethod
     def select_window(df, M: int, time):
         return df.loc[time - timedelta(hours=M):time]
 

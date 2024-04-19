@@ -3,12 +3,13 @@ import pandas as pd
 from datetime import datetime, timedelta
 from collections import defaultdict
 from src.trading_strategy import TradingStrategy
+from src.utility import Utility
 
 
 class BackTesting:
     def __init__(self, start_time, end_time, M, tokens_largest_cap, tokens_price, initial_capital=10000):
-        self.start_time = self._parse_date(start_time)
-        self.end_time = self._parse_date(end_time)
+        self.start_time = Utility.parse_date(start_time)
+        self.end_time = Utility.parse_date(end_time)
         self.tokens_largest_cap = tokens_largest_cap
         self.tokens_price = tokens_price
         self.cash_value = initial_capital
@@ -16,13 +17,6 @@ class BackTesting:
         self.portfolio = defaultdict(int)  # Use int for default zero
         self.portfolio_value = {}
         self.run_backtest()
-
-    @staticmethod
-    def _parse_date(self, date_str):
-        try:
-            return datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S%z')
-        except ValueError as e:
-            raise ValueError(f"Invalid date format: {date_str}") from e
 
     def run_backtest(self):
         all_signals = []
